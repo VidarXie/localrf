@@ -21,9 +21,8 @@ from dataLoader.localrf_dataset import LocalRFDataset
 from local_tensorfs import LocalTensorfs
 from opt import config_parser
 from renderer import render
-from utils.utils import (get_fwd_bwd_cam2cams, smooth_poses_spline)
-from utils.utils import (N_to_reso, TVLoss, draw_poses, get_pred_flow,
-                         compute_depth_loss)
+from utils.utils import get_fwd_bwd_cam2cams, smooth_poses_spline
+from utils.utils import N_to_reso, TVLoss, draw_poses, get_pred_flow, compute_depth_loss
 
 
 def save_transforms(poses_mtx, transform_path, local_tensorfs, train_dataset=None):
@@ -40,8 +39,8 @@ def save_transforms(poses_mtx, transform_path, local_tensorfs, train_dataset=Non
         "k2": 0.0,
         "p1": 0.0,
         "p2": 0.0,
-        "cx": local_tensorfs.W/2,
-        "cy": local_tensorfs.H/2,
+        "cx": local_tensorfs.W / 2,
+        "cy": local_tensorfs.H / 2,
         "w": local_tensorfs.W,
         "h": local_tensorfs.H,
         "frames": [],
@@ -64,11 +63,15 @@ def save_transforms(poses_mtx, transform_path, local_tensorfs, train_dataset=Non
 def render_frames(
     args, poses_mtx, local_tensorfs, logfolder, test_dataset, train_dataset
 ):
-    save_transforms(poses_mtx.cpu(), f"{logfolder}/transforms.json", local_tensorfs, train_dataset)
+    save_transforms(
+        poses_mtx.cpu(), f"{logfolder}/transforms.json", local_tensorfs, train_dataset
+    )
     t_w2rf = torch.stack(list(local_tensorfs.world2rf), dim=0).detach().cpu()
-    RF_mtx_inv = torch.cat([torch.stack(len(t_w2rf) * [torch.eye(3)]), t_w2rf.clone()[..., None]], axis=-1)
+    RF_mtx_inv = torch.cat(
+        [torch.stack(len(t_w2rf) * [torch.eye(3)]), t_w2rf.clone()[..., None]], axis=-1
+    )
     save_transforms(RF_mtx_inv.cpu(), f"{logfolder}/transforms_rf.json", local_tensorfs)
-    
+
     W, H = train_dataset.img_wh
 
     if args.render_test:
@@ -77,67 +80,38 @@ def render_frames(
             poses_mtx,
             local_tensorfs,
             args,
-            W=W, H=H,
+            W=int(W / 1.5),
+            H=int(H / 1.5),
             savePath=f"{logfolder}/test",
             save_frames=True,
             save_video=False,
             add_frame_to_list=False,
-            test=True,
             train_dataset=train_dataset,
-            img_format="png",
-            start=0
+            img_format="jpg",
         )
 
     if args.render_path:
         c2ws = smooth_poses_spline(poses_mtx, median_prefilter=True)
         os.makedirs(f"{logfolder}/smooth_spline", exist_ok=True)
-        save_transforms(c2ws.cpu(), f"{logfolder}/smooth_spline/transforms.json", local_tensorfs)
+        save_transforms(
+            c2ws.cpu(), f"{logfolder}/smooth_spline/transforms.json", local_tensorfs
+        )
         render(
             test_dataset,
             c2ws,
             local_tensorfs,
             args,
-            W=int(W / 1.5), H=int(H / 1.5),
+            W=int(W / 1.5),
+            H=int(H / 1.5),
             savePath=f"{logfolder}/smooth_spline",
             train_dataset=train_dataset,
             img_format="jpg",
             save_frames=True,
-            save_video=not args.skip_saving_video, # skip_saving_video=True if set; save_video=False to save RAM --> not args.skip_saving_video
+            save_video=False,  # skip_saving_video=True if set; save_video=False to save RAM --> not args.skip_saving_video
             add_frame_to_list=False,
             floater_thresh=0.5,
         )
 
-    if args.render_from_file != "":
-        with open(args.render_from_file, 'r') as f:
-            transforms = json.load(f)
-        c2ws = [transform["transform_matrix"] for transform in transforms["frames"]]
-        c2ws = torch.tensor(c2ws).to(args.device)
-        c2ws = c2ws[..., :3, :]
-
-        if args.with_preprocessed_poses:
-            raw2ours = torch.inverse(torch.from_numpy(train_dataset.first_pose)).to(c2ws)
-            for c2w in c2ws:
-               c2w[:3, :3] = raw2ours[:3, :3] @ c2w[:3, :3]
-               c2w[:3, 3] = raw2ours[:3, :3] @ c2w[:3, 3]
-               c2w[:3, 3] = raw2ours[:3, 3] + c2w[:3, 3]
-            c2ws[:, :3, 3] *= train_dataset.pose_scale
-
-        save_path = f"{logfolder}/{os.path.splitext(os.path.basename(args.render_from_file))[0]}"
-        os.makedirs(save_path, exist_ok=True)
-        render(
-            test_dataset,
-            c2ws,
-            local_tensorfs,
-            args,
-            W=W, H=H,
-            savePath=save_path,
-            train_dataset=train_dataset,
-            img_format="jpg",
-            save_frames=True,
-            save_video=not args.skip_saving_video, # skip_saving_video=True if set; save_video=False to save RAM --> not args.skip_saving_video
-            add_frame_to_list=False,
-            floater_thresh=0.5,
-        )
 
 @torch.no_grad()
 def render_test(args):
@@ -175,7 +149,7 @@ def render_test(args):
         ckpt_path = f"{logfolder}/checkpoints_tmp.th"
         if not os.path.isfile(ckpt_path):
             print("the ckpt path does not exists!!")
-            return  
+            return
 
     with open(ckpt_path, "rb") as f:
         ckpt = torch.load(f, map_location=args.device)
@@ -183,7 +157,7 @@ def render_test(args):
     if args.with_preprocessed_poses:
         kwargs["camera_prior"] = {
             "rel_poses": torch.from_numpy(train_dataset.rel_poses).to(args.device),
-            "transforms": train_dataset.transforms
+            "transforms": train_dataset.transforms,
         }
     else:
         kwargs["camera_prior"] = None
@@ -199,26 +173,34 @@ def render_test(args):
         local_tensorfs,
         logfolder,
         test_dataset=test_dataset,
-        train_dataset=train_dataset
+        train_dataset=train_dataset,
     )
 
 
 def reconstruction(args):
     # Apply speedup factors
-    args.n_iters_per_frame = int(args.n_iters_per_frame / args.refinement_speedup_factor)
+    args.n_iters_per_frame = int(
+        args.n_iters_per_frame / args.refinement_speedup_factor
+    )
     args.n_iters_reg = int(args.n_iters_reg / args.refinement_speedup_factor)
-    args.upsamp_list = [int(upsamp / args.refinement_speedup_factor) for upsamp in args.upsamp_list]
-    args.update_AlphaMask_list = [int(update_AlphaMask / args.refinement_speedup_factor) 
-                                  for update_AlphaMask in args.update_AlphaMask_list]
-    
+    args.upsamp_list = [
+        int(upsamp / args.refinement_speedup_factor) for upsamp in args.upsamp_list
+    ]
+    args.update_AlphaMask_list = [
+        int(update_AlphaMask / args.refinement_speedup_factor)
+        for update_AlphaMask in args.update_AlphaMask_list
+    ]
+
     args.add_frames_every = int(args.add_frames_every / args.prog_speedup_factor)
     args.lr_R_init = args.lr_R_init * args.prog_speedup_factor
     args.lr_t_init = args.lr_t_init * args.prog_speedup_factor
-    args.loss_flow_weight_inital = args.loss_flow_weight_inital * args.prog_speedup_factor
+    args.loss_flow_weight_inital = (
+        args.loss_flow_weight_inital * args.prog_speedup_factor
+    )
     args.L1_weight = args.L1_weight * args.prog_speedup_factor
     args.TV_weight_density = args.TV_weight_density * args.prog_speedup_factor
     args.TV_weight_app = args.TV_weight_app * args.prog_speedup_factor
-    
+
     # init dataset
     train_dataset = LocalRFDataset(
         f"{args.datadir}",
@@ -284,17 +266,17 @@ def reconstruction(args):
         ).long()
     ).tolist()[1:]
     N_voxel_list = {
-        usamp_idx: round(N_voxel**(1/3))**3 for usamp_idx, N_voxel in zip(upsamp_list, N_voxel_list)
+        usamp_idx: round(N_voxel ** (1 / 3)) ** 3
+        for usamp_idx, N_voxel in zip(upsamp_list, N_voxel_list)
     }
 
     if args.with_preprocessed_poses:
         camera_prior = {
             "rel_poses": torch.from_numpy(train_dataset.rel_poses).to(args.device),
-            "transforms": train_dataset.transforms
+            "transforms": train_dataset.transforms,
         }
     else:
         camera_prior = None
-
 
     local_tensorfs = LocalTensorfs(
         camera_prior=camera_prior,
@@ -348,7 +330,9 @@ def reconstruction(args):
     start_time = time.time()
     while training:
         optimize_poses = args.lr_R_init > 0 or args.lr_t_init > 0
-        data_blob = train_dataset.sample(args.batch_size, local_tensorfs.is_refining, optimize_poses)
+        data_blob = train_dataset.sample(
+            args.batch_size, local_tensorfs.is_refining, optimize_poses
+        )
         view_ids = torch.from_numpy(data_blob["view_ids"]).to(args.device)
         rgb_train = torch.from_numpy(data_blob["rgbs"]).to(args.device)
         loss_weights = torch.from_numpy(data_blob["loss_weights"]).to(args.device)
@@ -366,20 +350,30 @@ def reconstruction(args):
         )
 
         # loss
-        loss = 0.25 * ((torch.abs(rgb_map - rgb_train)) * loss_weights) / loss_weights.mean()
-               
+        loss = (
+            0.25
+            * ((torch.abs(rgb_map - rgb_train)) * loss_weights)
+            / loss_weights.mean()
+        )
+
         loss = loss.mean()
         total_loss = loss
         writer.add_scalar("train/rgb_loss", loss, global_step=iteration)
 
         ## Regularization
         # Get rendered rays schedule
-        if local_tensorfs.regularize and args.loss_flow_weight_inital > 0 or args.loss_depth_weight_inital > 0:
+        if (
+            local_tensorfs.regularize
+            and args.loss_flow_weight_inital > 0
+            or args.loss_depth_weight_inital > 0
+        ):
             depth_map = depth_map.view(view_ids.shape[0], -1)
             loss_weights = loss_weights.view(view_ids.shape[0], -1)
             depth_map = depth_map.view(view_ids.shape[0], -1)
 
-            writer.add_scalar("train/reg_loss_weights", reg_loss_weight, global_step=iteration)
+            writer.add_scalar(
+                "train/reg_loss_weights", reg_loss_weight, global_step=iteration
+            )
 
         # Optical flow
         if local_tensorfs.regularize and args.loss_flow_weight_inital > 0:
@@ -389,41 +383,90 @@ def reconstruction(args):
             cam2world = local_tensorfs.get_cam2world(starting_id=starting_frame_id)
             directions = directions.view(view_ids.shape[0], -1, 3)
             ij = ij.view(view_ids.shape[0], -1, 2)
-            fwd_flow = torch.from_numpy(data_blob["fwd_flow"]).to(args.device).view(view_ids.shape[0], -1, 2)
-            fwd_mask = torch.from_numpy(data_blob["fwd_mask"]).to(args.device).view(view_ids.shape[0], -1)
+            fwd_flow = (
+                torch.from_numpy(data_blob["fwd_flow"])
+                .to(args.device)
+                .view(view_ids.shape[0], -1, 2)
+            )
+            fwd_mask = (
+                torch.from_numpy(data_blob["fwd_mask"])
+                .to(args.device)
+                .view(view_ids.shape[0], -1)
+            )
             fwd_mask[view_ids == len(cam2world) - 1] = 0
-            bwd_flow = torch.from_numpy(data_blob["bwd_flow"]).to(args.device).view(view_ids.shape[0], -1, 2)
-            bwd_mask = torch.from_numpy(data_blob["bwd_mask"]).to(args.device).view(view_ids.shape[0], -1)
-            fwd_cam2cams, bwd_cam2cams = get_fwd_bwd_cam2cams(cam2world, view_ids - starting_frame_id)
-                       
+            bwd_flow = (
+                torch.from_numpy(data_blob["bwd_flow"])
+                .to(args.device)
+                .view(view_ids.shape[0], -1, 2)
+            )
+            bwd_mask = (
+                torch.from_numpy(data_blob["bwd_mask"])
+                .to(args.device)
+                .view(view_ids.shape[0], -1)
+            )
+            fwd_cam2cams, bwd_cam2cams = get_fwd_bwd_cam2cams(
+                cam2world, view_ids - starting_frame_id
+            )
+
             pts = directions * depth_map[..., None]
             pred_fwd_flow = get_pred_flow(
-                pts, ij, fwd_cam2cams, local_tensorfs.focal(W), local_tensorfs.center(W, H))
+                pts,
+                ij,
+                fwd_cam2cams,
+                local_tensorfs.focal(W),
+                local_tensorfs.center(W, H),
+            )
             pred_bwd_flow = get_pred_flow(
-                pts, ij, bwd_cam2cams, local_tensorfs.focal(W), local_tensorfs.center(W, H))
-            flow_loss_arr =  torch.sum(torch.abs(pred_bwd_flow - bwd_flow), dim=-1) * bwd_mask
-            flow_loss_arr += torch.sum(torch.abs(pred_fwd_flow - fwd_flow), dim=-1) * fwd_mask
-            flow_loss_arr[flow_loss_arr > torch.quantile(flow_loss_arr, 0.9, dim=1)[..., None]] = 0
+                pts,
+                ij,
+                bwd_cam2cams,
+                local_tensorfs.focal(W),
+                local_tensorfs.center(W, H),
+            )
+            flow_loss_arr = (
+                torch.sum(torch.abs(pred_bwd_flow - bwd_flow), dim=-1) * bwd_mask
+            )
+            flow_loss_arr += (
+                torch.sum(torch.abs(pred_fwd_flow - fwd_flow), dim=-1) * fwd_mask
+            )
+            flow_loss_arr[
+                flow_loss_arr > torch.quantile(flow_loss_arr, 0.9, dim=1)[..., None]
+            ] = 0
 
-            flow_loss = (flow_loss_arr).mean() * args.loss_flow_weight_inital * reg_loss_weight / ((W + H) / 2)
+            flow_loss = (
+                (flow_loss_arr).mean()
+                * args.loss_flow_weight_inital
+                * reg_loss_weight
+                / ((W + H) / 2)
+            )
             total_loss = total_loss + flow_loss
             writer.add_scalar("train/flow_loss", flow_loss, global_step=iteration)
 
-        # Monocular Depth 
+        # Monocular Depth
         if local_tensorfs.regularize and args.loss_depth_weight_inital > 0:
             if args.fov == 360:
                 raise NotImplementedError
             invdepths = torch.from_numpy(data_blob["invdepths"]).to(args.device)
             invdepths = invdepths.view(view_ids.shape[0], -1)
-            _, _, depth_loss_arr = compute_depth_loss(1 / depth_map.clamp(1e-6), invdepths)
-            depth_loss_arr[depth_loss_arr > torch.quantile(depth_loss_arr, 0.8, dim=1)[..., None]] = 0
+            _, _, depth_loss_arr = compute_depth_loss(
+                1 / depth_map.clamp(1e-6), invdepths
+            )
+            depth_loss_arr[
+                depth_loss_arr > torch.quantile(depth_loss_arr, 0.8, dim=1)[..., None]
+            ] = 0
 
-            depth_loss = (depth_loss_arr).mean() * args.loss_depth_weight_inital * reg_loss_weight
-            total_loss = total_loss + depth_loss 
+            depth_loss = (
+                (depth_loss_arr).mean()
+                * args.loss_depth_weight_inital
+                * reg_loss_weight
+            )
+            total_loss = total_loss + depth_loss
             writer.add_scalar("train/depth_loss", depth_loss, global_step=iteration)
 
-        if  local_tensorfs.regularize:
-            loss_tv, l1_loss = local_tensorfs.get_reg_loss(tvreg, args.TV_weight_density, args.TV_weight_app, args.L1_weight)
+        if local_tensorfs.regularize:
+            loss_tv, l1_loss = local_tensorfs.get_reg_loss(
+                tvreg, args.TV_weight_density, args.TV_weight_app, args.L1_weight
+            )
             total_loss = total_loss + loss_tv + l1_loss
             writer.add_scalar("train/loss_tv", loss_tv, global_step=iteration)
             writer.add_scalar("train/l1_loss", l1_loss, global_step=iteration)
@@ -435,20 +478,30 @@ def reconstruction(args):
                 local_tensorfs.optimizer_step_poses_only(total_loss)
         else:
             can_add_rf = local_tensorfs.optimizer_step(total_loss, optimize_poses)
-            training |= train_dataset.active_frames_bounds[1] != train_dataset.num_images
+            training |= (
+                train_dataset.active_frames_bounds[1] != train_dataset.num_images
+            )
 
         ## Progressive optimization
         if not local_tensorfs.is_refining:
-            should_refine = (not train_dataset.has_left_frames() or (
-                n_added_frames > args.n_overlap and (
+            should_refine = not train_dataset.has_left_frames() or (
+                n_added_frames > args.n_overlap
+                and (
                     local_tensorfs.get_dist_to_last_rf().cpu().item() > args.max_drift
-                    or (train_dataset.active_frames_bounds[1] - train_dataset.active_frames_bounds[0]) >= args.n_max_frames
-                )))
+                    or (
+                        train_dataset.active_frames_bounds[1]
+                        - train_dataset.active_frames_bounds[0]
+                    )
+                    >= args.n_max_frames
+                )
+            )
             if should_refine and (iteration - last_add_iter) >= args.add_frames_every:
                 local_tensorfs.is_refining = True
 
             should_add_frame = train_dataset.has_left_frames()
-            should_add_frame &= (iteration - last_add_iter + 1) % args.add_frames_every == 0
+            should_add_frame &= (
+                iteration - last_add_iter + 1
+            ) % args.add_frames_every == 0
 
             should_add_frame &= not should_refine
             should_add_frame &= not local_tensorfs.is_refining
@@ -467,9 +520,10 @@ def reconstruction(args):
                 last_add_rf_iter = iteration
 
                 # Remove supervising frames
-                training_frames = (local_tensorfs.blending_weights[:, -1] > 0)
+                training_frames = local_tensorfs.blending_weights[:, -1] > 0
                 train_dataset.deactivate_frames(
-                    np.argmax(training_frames.cpu().numpy(), axis=0))
+                    np.argmax(training_frames.cpu().numpy(), axis=0)
+                )
             else:
                 training = False
         ## Log
@@ -497,21 +551,27 @@ def reconstruction(args):
             global_step=iteration,
         )
 
+        writer.add_scalar("train/focal", local_tensorfs.focal(W), global_step=iteration)
         writer.add_scalar(
-            "train/focal", local_tensorfs.focal(W), global_step=iteration
+            "train/center0",
+            local_tensorfs.center(W, H)[0].item(),
+            global_step=iteration,
         )
         writer.add_scalar(
-            "train/center0", local_tensorfs.center(W, H)[0].item(), global_step=iteration
-        )
-        writer.add_scalar(
-            "train/center1", local_tensorfs.center(W, H)[1].item(), global_step=iteration
+            "train/center1",
+            local_tensorfs.center(W, H)[1].item(),
+            global_step=iteration,
         )
 
         writer.add_scalar(
-            "active_frames_bounds/0", train_dataset.active_frames_bounds[0], global_step=iteration
+            "active_frames_bounds/0",
+            train_dataset.active_frames_bounds[0],
+            global_step=iteration,
         )
         writer.add_scalar(
-            "active_frames_bounds/1", train_dataset.active_frames_bounds[1], global_step=iteration
+            "active_frames_bounds/1",
+            train_dataset.active_frames_bounds[1],
+            global_step=iteration,
         )
 
         for index, blending_weights in enumerate(
@@ -519,10 +579,14 @@ def reconstruction(args):
         ):
             active_cam_indices = torch.nonzero(blending_weights)
             writer.add_scalar(
-                f"tensorf_bounds/rf{index}_b0", active_cam_indices[0], global_step=iteration
+                f"tensorf_bounds/rf{index}_b0",
+                active_cam_indices[0],
+                global_step=iteration,
             )
             writer.add_scalar(
-                f"tensorf_bounds/rf{index}_b1", active_cam_indices[-1], global_step=iteration
+                f"tensorf_bounds/rf{index}_b1",
+                active_cam_indices[-1],
+                global_step=iteration,
             )
 
         # Print the current values of the losses.
@@ -530,104 +594,131 @@ def reconstruction(args):
             # All poses visualization
             poses_mtx = local_tensorfs.get_cam2world().detach().cpu()
             t_w2rf = torch.stack(list(local_tensorfs.world2rf), dim=0).detach().cpu()
-            RF_mtx_inv = torch.cat([torch.stack(len(t_w2rf) * [torch.eye(3)]), -t_w2rf.clone()[..., None]], axis=-1)
+            RF_mtx_inv = torch.cat(
+                [torch.stack(len(t_w2rf) * [torch.eye(3)]), -t_w2rf.clone()[..., None]],
+                axis=-1,
+            )
 
-            all_poses = torch.cat([poses_mtx,  RF_mtx_inv], dim=0)
+            all_poses = torch.cat([poses_mtx, RF_mtx_inv], dim=0)
             colours = ["C1"] * poses_mtx.shape[0] + ["C2"] * RF_mtx_inv.shape[0]
             img = draw_poses(all_poses, colours)
-            writer.add_image("poses/all", (np.transpose(img, (2, 0, 1)) / 255.0).astype(np.float32), iteration)
+            # writer.add_image(
+            #     "poses/all",
+            #     (np.transpose(img, (2, 0, 1)) / 255.0).astype(np.float32),
+            #     iteration,
+            # )
 
-            # Get runtime 
-            ips = min(args.progress_refresh_rate, iteration + 1) / (time.time() - start_time)
+            # Get runtime
+            ips = min(args.progress_refresh_rate, iteration + 1) / (
+                time.time() - start_time
+            )
             writer.add_scalar(f"train/iter_per_sec", ips, global_step=iteration)
             print(f"Iteration {iteration:06d}: {ips:.2f} it/s")
             start_time = time.time()
 
-        if (iteration % args.vis_every == args.vis_every - 1):
+        if iteration % args.vis_every == args.vis_every - 1:
             poses_mtx = local_tensorfs.get_cam2world().detach()
-            rgb_maps_tb, depth_maps_tb, gt_rgbs_tb, fwd_flow_cmp_tb, bwd_flow_cmp_tb, depth_err_tb, loc_metrics = render(
+            (
+                rgb_maps_tb,
+                depth_maps_tb,
+                gt_rgbs_tb,
+                fwd_flow_cmp_tb,
+                bwd_flow_cmp_tb,
+                depth_err_tb,
+                loc_metrics,
+            ) = render(
                 test_dataset,
                 poses_mtx,
                 local_tensorfs,
                 args,
-                W=W // 2, H=H // 2,
+                W=W // 2,
+                H=H // 2,
                 savePath=logfolder,
                 save_frames=True,
                 img_format="jpg",
                 test=True,
                 train_dataset=train_dataset,
                 start=train_dataset.active_frames_bounds[0],
-                add_frame_to_list= not args.skip_TB_images, # skip_TB_images=True if set; add_frame_to_list=False to save RAM --> not args.skip_TB_images
+                add_frame_to_list=not args.skip_TB_images,  # skip_TB_images=True if set; add_frame_to_list=False to save RAM --> not args.skip_TB_images
             )
 
             if len(loc_metrics.values()):
                 metrics.update(loc_metrics)
                 mses = [metric["mse"] for metric in metrics.values()]
                 writer.add_scalar(
-                    f"test/PSNR", -10.0 * np.log(np.array(mses).mean()) / np.log(10.0), 
-                    global_step=iteration
+                    f"test/PSNR",
+                    -10.0 * np.log(np.array(mses).mean()) / np.log(10.0),
+                    global_step=iteration,
                 )
                 loc_mses = [metric["mse"] for metric in loc_metrics.values()]
                 writer.add_scalar(
-                    f"test/local_PSNR", -10.0 * np.log(np.array(loc_mses).mean()) / np.log(10.0), 
-                    global_step=iteration
+                    f"test/local_PSNR",
+                    -10.0 * np.log(np.array(loc_mses).mean()) / np.log(10.0),
+                    global_step=iteration,
                 )
                 ssim = [metric["ssim"] for metric in metrics.values()]
                 writer.add_scalar(
-                    f"test/ssim", np.array(ssim).mean(), 
-                    global_step=iteration
+                    f"test/ssim", np.array(ssim).mean(), global_step=iteration
                 )
                 loc_ssim = [metric["ssim"] for metric in loc_metrics.values()]
                 writer.add_scalar(
-                    f"test/local_ssim", np.array(loc_ssim).mean(), 
-                    global_step=iteration
+                    f"test/local_ssim", np.array(loc_ssim).mean(), global_step=iteration
                 )
 
-                if not args.skip_TB_images: # default False if not set, will be True if set. 
-                    writer.add_images(
-                        "test/rgb_maps",
-                        torch.stack(rgb_maps_tb, 0),
-                        global_step=iteration,
-                        dataformats="NHWC",
-                    )
-                    writer.add_images(
-                        "test/depth_map",
-                        torch.stack(depth_maps_tb, 0),
-                        global_step=iteration,
-                        dataformats="NHWC",
-                    )
-                    writer.add_images(
-                        "test/gt_maps",
-                        torch.stack(gt_rgbs_tb, 0),
-                        global_step=iteration,
-                        dataformats="NHWC",
-                    )
-                    
-                    if len(fwd_flow_cmp_tb) > 0:
-                        writer.add_images(
-                            "test/fwd_flow_cmp",
-                            torch.stack(fwd_flow_cmp_tb, 0)[..., None],
-                            global_step=iteration,
-                            dataformats="NHWC",
-                        )
-                        
-                        writer.add_images(
-                            "test/bwd_flow_cmp",
-                            torch.stack(bwd_flow_cmp_tb, 0)[..., None],
-                            global_step=iteration,
-                            dataformats="NHWC",
-                        )
-                    
-                    if len(depth_err_tb) > 0:
-                        writer.add_images(
-                            "test/depth_cmp",
-                            torch.stack(depth_err_tb, 0)[..., None],
-                            global_step=iteration,
-                            dataformats="NHWC",
-                        )
+                if (
+                    not args.skip_TB_images
+                ):  # default False if not set, will be True if set.
+                    # writer.add_images(
+                    #     "test/rgb_maps",
+                    #     torch.stack(rgb_maps_tb, 0),
+                    #     global_step=iteration,
+                    #     dataformats="NHWC",
+                    # )
+                    # writer.add_images(
+                    #     "test/depth_map",
+                    #     torch.stack(depth_maps_tb, 0),
+                    #     global_step=iteration,
+                    #     dataformats="NHWC",
+                    # )
+                    # writer.add_images(
+                    #     "test/gt_maps",
+                    #     torch.stack(gt_rgbs_tb, 0),
+                    #     global_step=iteration,
+                    #     dataformats="NHWC",
+                    # )
+
+                    # if len(fwd_flow_cmp_tb) > 0:
+                    #     writer.add_images(
+                    #         "test/fwd_flow_cmp",
+                    #         torch.stack(fwd_flow_cmp_tb, 0)[..., None],
+                    #         global_step=iteration,
+                    #         dataformats="NHWC",
+                    #     )
+
+                    #     writer.add_images(
+                    #         "test/bwd_flow_cmp",
+                    #         torch.stack(bwd_flow_cmp_tb, 0)[..., None],
+                    #         global_step=iteration,
+                    #         dataformats="NHWC",
+                    #     )
+
+                    # if len(depth_err_tb) > 0:
+                    #     writer.add_images(
+                    #         "test/depth_cmp",
+                    #         torch.stack(depth_err_tb, 0)[..., None],
+                    #         global_step=iteration,
+                    #         dataformats="NHWC",
+                    #     )
 
                     # Clear all TensorBoard's lists
-                    for list_tb in [rgb_maps_tb, depth_maps_tb, gt_rgbs_tb, fwd_flow_cmp_tb, bwd_flow_cmp_tb, depth_err_tb]:
+                    for list_tb in [
+                        rgb_maps_tb,
+                        depth_maps_tb,
+                        gt_rgbs_tb,
+                        fwd_flow_cmp_tb,
+                        bwd_flow_cmp_tb,
+                        depth_err_tb,
+                    ]:
                         list_tb.clear()
 
             with open(f"{logfolder}/checkpoints_tmp.th", "wb") as f:
@@ -639,11 +730,17 @@ def reconstruction(args):
         local_tensorfs.save(f)
 
     poses_mtx = local_tensorfs.get_cam2world().detach()
-    render_frames(args, poses_mtx, local_tensorfs, logfolder, test_dataset=test_dataset, train_dataset=train_dataset)
+    render_frames(
+        args,
+        poses_mtx,
+        local_tensorfs,
+        logfolder,
+        test_dataset=test_dataset,
+        train_dataset=train_dataset,
+    )
 
 
 if __name__ == "__main__":
-
     torch.set_default_dtype(torch.float32)
     torch.manual_seed(20211202)
     np.random.seed(20211202)

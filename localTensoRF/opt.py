@@ -3,6 +3,7 @@
 
 import configargparse
 
+
 def config_parser(cmd=None):
     parser = configargparse.ArgumentParser()
     parser.add_argument("--config", is_config_file=True, help="config file path")
@@ -20,10 +21,10 @@ def config_parser(cmd=None):
     )
 
     parser.add_argument(
-        "--downsampling", 
-        type=float, 
-        default=-1, 
-        help="Downsampling ratio for training and testing. Test views rendered throughout optimization will be downsampled further two times."
+        "--downsampling",
+        type=float,
+        default=-1,
+        help="Downsampling ratio for training and testing. Test views rendered throughout optimization will be downsampled further two times.",
     )
 
     parser.add_argument(
@@ -38,10 +39,21 @@ def config_parser(cmd=None):
 
     ## training options
     # learning rate
-    parser.add_argument("--lr_R_init", type=float, default=5e-3, help="Rotation learning rate")
-    parser.add_argument("--lr_t_init", type=float, default=5e-4, help="Translation learning rate")
-    parser.add_argument("--lr_i_init", type=float, default=0, help="Intrinsics learning rate")
-    parser.add_argument("--lr_exposure_init", type=float, default=1e-3, help="Exposure compensation learning rate")
+    parser.add_argument(
+        "--lr_R_init", type=float, default=5e-3, help="Rotation learning rate"
+    )
+    parser.add_argument(
+        "--lr_t_init", type=float, default=5e-4, help="Translation learning rate"
+    )
+    parser.add_argument(
+        "--lr_i_init", type=float, default=0, help="Intrinsics learning rate"
+    )
+    parser.add_argument(
+        "--lr_exposure_init",
+        type=float,
+        default=1e-3,
+        help="Exposure compensation learning rate",
+    )
     parser.add_argument("--lr_init", type=float, default=0.02, help="learning rate")
     parser.add_argument("--lr_basis", type=float, default=1e-3, help="learning rate")
     parser.add_argument(
@@ -63,13 +75,17 @@ def config_parser(cmd=None):
     parser.add_argument("--n_iters_per_frame", type=int, default=600)
     parser.add_argument("--n_iters_reg", type=int, default=100)
     parser.add_argument(
-        "--upsamp_list", 
-        type=int, 
-        default=[100, 150, 200, 250, 300],
-        nargs='+')
-    parser.add_argument("--update_AlphaMask_list", type=int, default=[100, 200, 300], nargs='+')
-    parser.add_argument("--refinement_speedup_factor", type=float, default=1.0, 
-                        help="Divides number of iterations in scheduling. Does not apply to progressive optimization.")
+        "--upsamp_list", type=int, default=[100, 150, 200, 250, 300], nargs="+"
+    )
+    parser.add_argument(
+        "--update_AlphaMask_list", type=int, default=[100, 200, 300], nargs="+"
+    )
+    parser.add_argument(
+        "--refinement_speedup_factor",
+        type=float,
+        default=1.0,
+        help="Divides number of iterations in scheduling. Does not apply to progressive optimization.",
+    )
 
     # Progressive optimization scheduling options
     parser.add_argument(
@@ -102,15 +118,23 @@ def config_parser(cmd=None):
         default=30,
         help="Number of frames supervising two neighbour RFs",
     )
-    parser.add_argument("--prog_speedup_factor", type=float, default=1.0, 
-                        help="Divides number of iterations in progressive optimization scheduling. Multiplies pose lr.")
+    parser.add_argument(
+        "--prog_speedup_factor",
+        type=float,
+        default=1.0,
+        help="Divides number of iterations in progressive optimization scheduling. Multiplies pose lr.",
+    )
 
     # losses
     parser.add_argument("--loss_depth_weight_inital", type=float, default=0.1)
     parser.add_argument("--loss_flow_weight_inital", type=float, default=1)
     parser.add_argument("--L1_weight", type=float, default=1e-2, help="loss weight")
-    parser.add_argument("--TV_weight_density", type=float, default=0.0, help="loss weight")#0.1
-    parser.add_argument("--TV_weight_app", type=float, default=0.0, help="loss weight")#0.01
+    parser.add_argument(
+        "--TV_weight_density", type=float, default=0.0, help="loss weight"
+    )  # 0.1
+    parser.add_argument(
+        "--TV_weight_app", type=float, default=0.0, help="loss weight"
+    )  # 0.01
 
     # model
     # volume options
@@ -145,7 +169,10 @@ def config_parser(cmd=None):
 
     # network decoder
     parser.add_argument(
-        "--shadingMode", type=str, default="MLP_Fea_late_view", help="which shading mode to use"
+        "--shadingMode",
+        type=str,
+        default="MLP_Fea_late_view",
+        help="which shading mode to use",
     )
     parser.add_argument("--pos_pe", type=int, default=0, help="number of pe for pos")
     parser.add_argument("--view_pe", type=int, default=0, help="number of pe for view")
@@ -165,13 +192,25 @@ def config_parser(cmd=None):
     parser.add_argument("--render_only", type=int, default=0)
     parser.add_argument("--render_test", type=int, default=1)
     parser.add_argument("--render_path", type=int, default=1)
-    parser.add_argument("--render_from_file", type=str, default="", help="to load camera poses and render from them: https://github.com/facebookresearch/localrf/issues/20")
+    parser.add_argument(
+        "--render_from_file",
+        type=str,
+        default="",
+        help="to load camera poses and render from them: https://github.com/facebookresearch/localrf/issues/20",
+    )
 
     ## ------ For saving RAM ------ ##
     # Set these flags to save your RAM. The final rendered images are still generated and saved.
-    parser.add_argument("--skip_saving_video", action='store_true', help="If set, will not generate rendered video") # default False if not set, will be True if set.
-    parser.add_argument("--skip_TB_images", action='store_true', help="If set, TensorBoard will not show the rendered images.") # default False if not set, will be True if set.
-
+    parser.add_argument(
+        "--skip_saving_video",
+        action="store_true",
+        help="If set, will not generate rendered video",
+    )  # default False if not set, will be True if set.
+    parser.add_argument(
+        "--skip_TB_images",
+        action="store_true",
+        help="If set, TensorBoard will not show the rendered images.",
+    )  # default False if not set, will be True if set.
 
     # rendering options
     parser.add_argument("--fea2denseAct", type=str, default="softplus")
@@ -184,15 +223,27 @@ def config_parser(cmd=None):
     parser.add_argument("--step_ratio", type=float, default=0.5)
 
     # Camera model options
-    parser.add_argument("--fov", type=float, default=85.6, help="horizontal FoV in degree")
+    parser.add_argument(
+        "--fov", type=float, default=85.6, help="horizontal FoV in degree"
+    )
     parser.add_argument("--with_preprocessed_poses", type=int, default=0)
 
     parser.add_argument("--subsequence", default=[0, -1], type=int, nargs=2)
-    parser.add_argument('--frame_step', type=int, default=1, help="Step between retained frames")
-    parser.add_argument("--test_frame_every", default=10, type=int, help="Every test_frame_every-th frame is a test frame.")
+    parser.add_argument(
+        "--frame_step", type=int, default=1, help="Step between retained frames"
+    )
+    parser.add_argument(
+        "--test_frame_every",
+        default=10,
+        type=int,
+        help="Every test_frame_every-th frame is a test frame.",
+    )
     # logging/saving options
     parser.add_argument(
-        "--vis_every", type=int, default=10000, help="Frequency of visualize the test images."
+        "--vis_every",
+        type=int,
+        default=10000,
+        help="Frequency of visualize the test images.",
     )
     parser.add_argument("--device", type=str, default="cuda:0")
     if cmd is not None:
